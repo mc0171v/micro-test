@@ -1,0 +1,23 @@
+description = 'vennetics-spring-boot-common'
+
+dependencies {
+    // Vennetics starters
+    project(':spring-boot-starter-core-hystrix')
+    project(':spring-boot-starter-core-logging')
+    project(':spring-boot-starter-core-web')
+    
+    compile("org.springframework.boot:spring-boot-starter-web") {
+        exclude module: "spring-boot-starter-tomcat"
+    }
+    runtime("org.springframework.boot:spring-boot-starter-jetty")
+
+    runtime("org.springframework.boot:spring-boot-starter-actuator")
+
+    runtime("org.springframework.boot:spring-boot-starter-remote-shell")
+
+    runtime("org.springframework.boot:spring-boot-starter-aop")
+    
+    runtime("org.springframework.retry:spring-retry")
+    
+    runtime('org.springframework.cloud:spring-cloud-starter-sleuth')
+}

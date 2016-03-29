@@ -1,0 +1,16 @@
+jar { baseName = 'spring-boot-starter-core-logging' }
+
+dependencies {
+
+    compile("org.apache.commons:commons-lang3")
+    
+    compile("org.springframework.boot:spring-boot-starter-aop")
+    
+    // To log observables
+    compile("com.netflix.hystrix:hystrix-core")
+
+    testCompile('org.springframework.boot:spring-boot-starter-test')
+
+    testRuntime('org.springframework.boot:spring-boot-starter-log4j2')
+}
+

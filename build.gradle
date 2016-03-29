@@ -1,0 +1,341 @@
+
+//*********************************************************************
+// Define dependencies of plugins.
+//*********************************************************************
+buildscript {
+    repositories {
+        mavenCentral()
+        maven { url "https://repo.spring.io/snapshot" }
+        maven { url "https://repo.spring.io/milestone" }
+        // To allow SonarQube plugin
+        maven { url 'https://plugins.gradle.org/m2/' }
+    }
+    dependencies {
+        // SonarQube plugin
+        classpath "org.sonarqube.gradle:gradle-sonarqube-plugin:${sonarqubePluginVersion}"
+        classpath("io.spring.gradle:dependency-management-plugin:${dependencyManagementPluginVersion}")
+
+        classpath("org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}")
+        classpath('net.researchgate:gradle-release:2.3.4')
+    }
+}
+
+//*********************************************************************
+// Import common dependency groups.
+//*********************************************************************
+apply from: 'libraries.gradle'
+
+//*********************************************************************
+// Release plugin only applied to root - Will only build root
+// but dependecy update subs will change versions in other projects
+//*********************************************************************
+apply plugin: 'net.researchgate.release'
+
+task(updateSubs) << {
+  def versionToBeUpdated
+  def updatedCompose
+  FileTree dockerComposeTree = fileTree(dir: project.projectDir, includes: ["**/docker-compose*.yml"])
+  dockerComposeTree.each {File dockerComposeFile ->
+    if (project.version.contains('SNAPSHOT')) {
+      versionToBeUpdated=tagVersion
+      updatedCompose = dockerComposeFile.text.replaceAll(/(image:[^:]*)(:$tagVersion)/,"\$1:latest")
+    } else {
+      versionToBeUpdated=prereleaseVersion
+      updatedCompose = dockerComposeFile.text.replaceAll(/(image:[^:]*)(:latest)/,"\$1:$project.version")
+    }
+    dockerComposeFile.write(updatedCompose)
+  }
+  FileTree tree = fileTree(dir: project.projectDir, includes: ["**/Dockerfile"])
+  tree.each {File file ->
+    if (file.text.contains(versionToBeUpdated)) {
+      def updated = file.text.replaceAll(versionToBeUpdated,project.version)
+      file.write(updated)
+    }
+  }
+}
+
+//*********************************************************************
+// Update SNAPSHOT to release version
+//*********************************************************************
+beforeReleaseBuild.dependsOn updateSubs
+//*********************************************************************
+// Update release to new SNAPSHOT version
+//*********************************************************************
+commitNewVersion.dependsOn updateSubs
+
+release {
+  tagTemplate = '$version'
+  failOnSnapshotDependencies = false
+}
+
+//*********************************************************************
+// Sonarqube is only applied to the root project.
+// Password should be set in personal user properties
+// e.g. sonarPassword=MyPassword
+//*********************************************************************
+apply plugin: "org.sonarqube"
+
+sonarqube {
+    properties {
+        property "sonar.host.url", "https://sonarqube.vennetics.com/sonarqube"
+        property "sonar.login", "VenneticsDev"
+        property "sonar.password", sonarPassword
+        property "sonar.projectKey", "com.vennetics:microservices-common"
+        property "sonar.projectName", "Microservices Common"
+    }
+}
+
+//*********************************************************************
+// Multi-project setup applicable to all projects including the root.
+//*********************************************************************
+allprojects {
+
+    apply plugin: 'idea'
+    apply plugin: 'eclipse'
+    apply plugin: 'checkstyle'
+    apply plugin: 'pmd'
+    apply plugin: 'findbugs'
+    apply plugin: 'jacoco'
+    apply plugin: 'java'
+    apply plugin: 'maven-publish'
+    jar { onlyIf { project.name != rootProject.name } }
+
+    apply plugin: 'io.spring.dependency-management'
+
+    dependencyManagement {
+        dependencies {
+            dependency "junit:junit:${junitVersion}"
+            dependency "commons-io:commons-io:${commonsIOVersion}"
+            dependency "com.cloudhopper:ch-smpp:${chSmppVersion}"
+            dependency "com.googlecode.libphonenumber:libphonenumber:${libPhoneNumberVersion}"
+            dependency "com.jayway.jsonpath:json-path:${jaywayJsonPathVersion}"
+            dependency "com.netflix.rxjava:rxjava-core:${rxJavaVersion}"
+            dependency "com.netflix.hystrix:hystrix-core:${hystrixVersion}"
+            dependency "org.jvnet.jaxb2_commons:jaxb2-basics-runtime:${jaxb2BasicsVersion}"
+            dependency "de.codecentric:spring-boot-admin-server:${springAdminServerVersion}"
+            dependency "de.codecentric:spring-boot-admin-server-ui:${springAdminServerUiVersion}"
+            dependency "org.jolokia:jolokia-core:${jolokiaCoreVersion}"
+            dependency "org.reflections:reflections:${reflectionsVersion}"
+            dependency "org.apache.commons:commons-lang3:${commonsLang3Version}"
+        }
+        imports {
+            mavenBom "org.springframework.cloud:spring-cloud-starter-parent:${springCloudStarterParentBomVersion}"
+            mavenBom "org.springframework.boot:spring-boot-starter-parent:${springBootVersion}"
+        }
+    }
+
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        maven { url "https://repo.spring.io/repo" }
+        maven {
+            url "s3://mvn.vennetics.com/releases"
+            credentials(AwsCredentials) {
+                accessKey vennetics_s3_access_key
+                secretKey vennetics_s3_access_secret
+            }
+        }
+    }
+    
+    publishing {
+        publications {
+            mavenJava(MavenPublication) {
+                from components.java
+            }
+        }
+        
+        repositories {
+            maven {
+                credentials(AwsCredentials) {
+                    accessKey vennetics_s3_access_key
+                    secretKey vennetics_s3_access_secret
+                }
+                url "s3://mvn.vennetics.com/releases"
+            }
+        }
+    }
+
+    group = 'com.vennetics.microservices.common'
+
+    checkstyle {
+        configFile = file("$rootProject.projectDir/codequality/vennetics-checkstle-config.xml")
+        reportsDir = file("$project.buildDir/checkstyle")
+    }
+
+    pmd {
+        ruleSetFiles = files("$rootProject.projectDir/codequality/vennetics-pmd-rules.xml")
+        reportsDir = file("$project.buildDir/pmd")
+    }
+
+    findbugs {
+        excludeFilter = file("$rootProject.projectDir/codequality/vennetics-findbugs-exclude.xml")
+        effort = "max"
+        reportLevel = "high"
+        reportsDir = file("$project.buildDir/findbugs")
+    }
+
+    eclipse {
+        classpath {
+            containers.remove('org.eclipse.jdt.launching.JRE_CONTAINER')
+            containers 'org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.8'
+        }
+    }
+}
+
+//*********************************************************************
+// Applicable to sub-projects but not the root project
+//*********************************************************************
+subprojects {
+
+    sourceCompatibility = javaVersion
+    targetCompatibility = javaVersion
+
+    configurations {
+        // Exclude Logback which is default in *-starter-*
+        all*.exclude module : 'spring-boot-starter-logging'
+        // Make sure logback not pulled in by anything else (e.g. cassandra)
+        all*.exclude module : 'logback-core'
+        all*.exclude module : 'logback-classic'
+    }
+
+    dependencies {
+        
+        // All will depend on SLF4J
+        compile libraries.slf4j
+        
+        testCompile libraries.unitTest
+    }
+
+    jar {
+        manifest {
+            attributes("Implementation-Title": "Vennetics",
+            "Implementation-Version": jar.version)
+        }
+    }
+
+    jar.doLast { task ->
+        ant.checksum file: task.archivePath
+    }
+
+    //*****************************************************************
+    // Jacoco configuration.
+    //*****************************************************************
+
+    jacoco {
+        toolVersion jacocoToolVersion
+        reportsDir = file("$project.buildDir/jacoco")
+    }
+
+    jacocoTestReport {
+        reports {
+            xml.enabled true
+            csv.enabled true
+            //html.destination "${buildDir}/jacocoHtml"
+            csv.destination "${buildDir}/jacocoCsv"
+            xml.destination "${buildDir}/jacocoXml"
+        }
+    }
+    
+    sonarqube {
+        properties {
+            property "sonar.jacoco.reportPath", "$buildDir/jacoco/jacocoUnitTest.exec"
+            property "sonar.jacoco.itReportPath", "$buildDir/jacoco/jacocoIntegrationTest.exec"
+        }
+    }
+
+    //*****************************************************************
+    // Any failing test will terminate the build, unless --continue
+    // option specified.
+    //*****************************************************************
+
+    tasks.withType(Test) {
+        ignoreFailures = gradle.startParameter.continueOnFailure
+
+    }
+
+
+    //*****************************************************************
+    // Unit Test configuration.
+    //*****************************************************************
+    test {
+        useJUnit { 
+            excludeCategories 'com.vennetics.shared.test.utils.categories.IntegrationTest'
+        }
+        jacoco {
+            append = false
+            destinationFile = file("$buildDir/jacoco/jacocoUnitTest.exec")
+            classDumpFile = file("$buildDir/jacoco/classpathdumps/unit")
+        }
+        enableAssertions = false
+        jvmArgs += ["-XX:+HeapDumpOnOutOfMemoryError"]
+    }
+
+    //*****************************************************************
+    // Integration Test configuration.
+    //*****************************************************************
+
+    task integrationTest(type: Test) {
+        description 'Run the suite of Junit tests annotated with @Category(IntegrationTest)'
+        useJUnit { 
+            includeCategories 'com.vennetics.shared.test.utils.categories.IntegrationTest'
+        }
+        jacoco {
+            append = false
+            destinationFile = file("$buildDir/jacoco/jacocoIntegrationTest.exec")
+            classDumpFile = file("$buildDir/jacoco/classpathdumps/integration")
+        }
+        enableAssertions = false
+        jvmArgs += ["-XX:+HeapDumpOnOutOfMemoryError"]
+    }
+
+    //*****************************************************************
+    // Filter any resource files, replacing gradle property references
+    // such as @baseName@.
+    //*****************************************************************
+    configure(allProcessResourcesTasks(project)) {
+        filter(org.apache.tools.ant.filters.ReplaceTokens,
+                tokens: [baseName: project.jar.baseName,
+                         version: project.jar.version,
+                         gradleVersion: project.gradle.gradleVersion]
+        )
+    }
+
+    // See https://solidsoft.wordpress.com/2014/11/13/gradle-tricks-display-dependencies-for-all-subprojects-in-multi-project-build/
+    // Check project dependencies by running task :project:allDeps e.g. gw :subx:allDeps
+    task allDeps(type: DependencyReportTask) {}
+}
+
+//*********************************************************************
+// Deliver the process resource tasks for a given project.
+//*********************************************************************
+def allProcessResourcesTasks(project) {
+    project.sourceSets*.processResourcesTaskName.collect {
+        project.tasks[it]
+    }
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = gradleVersion
+}
+
+//*********************************************************************
+// After the last task if its a build print all the MD5 checksums
+//********************************************************************
+gradle.taskGraph.afterTask { task ->
+   if (task == gradle.taskGraph.getAllTasks().last() && task.getName().contains("build")) {
+      FileTree tree = fileTree(rootProject.projectDir).include("**/*.MD5");
+        tree.each {File file ->
+          println "$file.name $file.text"
+        }
+   }
+}
+
+task publishAllToMavenLocal {
+    description 'Publish all sub-projects that generate artifacts'
+    dependsOn subprojects.tasks*.matching { task -> task.name == 'publishToMavenLocal'  }
+}
+
+task publishAll {
+    description 'Publish all sub-projects that generate artifacts'
+    dependsOn subprojects.tasks*.matching { task -> task.name == 'publish'  }
+}

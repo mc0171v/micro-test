@@ -1,0 +1,16 @@
+jar {
+    baseName = 'spring-boot-starter-core-hystrix'
+}
+
+dependencies {
+    
+    compile("com.netflix.hystrix:hystrix-core")
+    compile('org.springframework.boot:spring-boot-starter')
+    
+    // Needed for MDC tests
+    testCompile ('org.springframework.boot:spring-boot-starter-log4j2')
+
+    // to test spring wiring
+    testCompile('org.springframework.boot:spring-boot-starter-test')
+}
+

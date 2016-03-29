@@ -1,0 +1,18 @@
+/*
+ * Common dependency groups.
+ */
+
+ext.libraries = [
+
+        slf4j: [
+                "org.slf4j:slf4j-api:${slf4jVersion}",
+        ],
+
+        unitTest: [
+                "org.mockito:mockito-core:${mockitoVersion}",
+                "org.hamcrest:hamcrest-all:${hamcrestVersion}",
+                "junit:junit",
+                "nl.jqno.equalsverifier:equalsverifier:${equalsverifierVersion}",
+                "com.vennetics.shared:com.vennetics.shared.test.utils:${venneticsTestUtilsVersion}"
+        ]
+]
