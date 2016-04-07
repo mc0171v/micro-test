@@ -12,7 +12,7 @@ buildscript {
     }
     dependencies {
         // SonarQube plugin
-        classpath "org.sonarqube.gradle:gradle-sonarqube-plugin:${sonarqubePluginVersion}"
+        classpath "org.sonarsource.scanner.gradle:sonarqube-gradle-plugin:${sonarqubePluginVersion}"
         classpath("io.spring.gradle:dependency-management-plugin:${dependencyManagementPluginVersion}")
 
         classpath("org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}")
@@ -77,7 +77,7 @@ apply plugin: "org.sonarqube"
 
 sonarqube {
     properties {
-        property "sonar.host.url", "https://sonarqube.vennetics.com/sonarqube"
+        property "sonar.host.url", "https://sonarqube.vennetics.com/"
         property "sonar.login", "VenneticsDev"
         property "sonar.password", sonarPassword
         property "sonar.projectKey", "com.vennetics:microservices-common"
@@ -172,13 +172,6 @@ allprojects {
         effort = "max"
         reportLevel = "high"
         reportsDir = file("$project.buildDir/findbugs")
-    }
-
-    eclipse {
-        classpath {
-            containers.remove('org.eclipse.jdt.launching.JRE_CONTAINER')
-            containers 'org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.8'
-        }
     }
 }
 
